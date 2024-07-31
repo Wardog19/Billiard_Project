@@ -1,6 +1,11 @@
-﻿from PyQt5.QtWidgets import QWidget
-from PyQt5.QtGui import QPainter, QColor, QBrush, QPen
+﻿import math
+from PyQt5.QtWidgets import QWidget
+from PyQt5.QtGui import QPainter, QColor, QBrush, QPen, QCursor
 from PyQt5.QtCore import QPointF, Qt, QEvent
+from pynput import mouse, keyboard
+import win32gui
+import win32con
+import win32api
 
 class BilliardWidget(QWidget):
     def __init__(self, balls, app_instance, *args, **kwargs):

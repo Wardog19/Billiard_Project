@@ -23,7 +23,7 @@
   </PropertyGroup>
   <ItemGroup>
     <Compile Include="ui.py" />
-    <Compile Include="ai_plan.py" />
+    <Compile Include="ai_plan.txt" />
     <Compile Include="game_logic.py" />
     <Compile Include="physics.py" />
     <Compile Include="main.py" />
