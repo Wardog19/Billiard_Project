@@ -22,6 +22,10 @@
     <EnableUnmanagedDebugging>false</EnableUnmanagedDebugging>
   </PropertyGroup>
   <ItemGroup>
+    <Compile Include="ui.py" />
+    <Compile Include="ai_plan.py" />
+    <Compile Include="game_logic.py" />
+    <Compile Include="physics.py" />
     <Compile Include="main.py" />
   </ItemGroup>
   <Import Project="$(MSBuildExtensionsPath32)\Microsoft\VisualStudio\v$(VisualStudioVersion)\Python Tools\Microsoft.PythonTools.targets" />
