@@ -1,4 +1,4 @@
-﻿from PyQt5.QtCore import QTimer
+﻿from PyQt5.QtCore import QTimer, QPointF, Qt, QEvent
 import sys
 from PyQt5.QtWidgets import QApplication
 from physics import Ball
