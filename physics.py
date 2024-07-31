@@ -1,7 +1,7 @@
 ﻿import math
 
 class Ball:
-    def __init__(self, x, y, radius, color, control_key=None):
+    def __init__(self, x, y, radius, color, control_key=None, new_velocity=None):
         self.x = x
         self.y = y
         self.radius = radius
@@ -60,33 +60,29 @@ class Ball:
             return None, None
 
         velocity_x, velocity_y = self.new_velocity
-
         projected_x = self.x
         projected_y = self.y
 
         for step in range(max_steps):
-            # Bewege die Phantomkugel entlang der Richtung der Hilfslinie
+            # Bewege die Phantomkugel entlang der berechneten Bahn
             projected_x += velocity_x * step_size
             projected_y += velocity_y * step_size
 
             # Überprüfe Kollisionen mit allen anderen Kugeln
             for other in other_balls:
-                if other != self:
+                if other != self:  # Ausschluss der eigenen Kugel
                     dx = other.x - projected_x
                     dy = other.y - projected_y
                     center_distance = math.sqrt(dx**2 + dy**2)
 
                     if center_distance <= (self.radius + other.radius):
+                        # Berechnung des Kontaktpunkts
                         normal = (dx / center_distance, dy / center_distance)
                         contact_x = other.x - normal[0] * other.radius
                         contact_y = other.y - normal[1] * other.radius
                         return (contact_x, contact_y), other
 
         return None, None
-
-
-
-
 
 
 # Beispiel-Testfälle zur Veranschaulichung der Funktionalität

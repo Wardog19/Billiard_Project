@@ -114,6 +114,27 @@ class BilliardWidget(QWidget):
                     projected_y += ball.new_velocity[1] * 0.1
                     qp.setBrush(QBrush(QColor(255, 255, 255, 100)))  # Weiße, halbtransparente Phantomkugel
                     qp.drawEllipse(QPointF(projected_x, projected_y), ball.radius, ball.radius)
+                    
+    def drawPhantomBall(self, qp, ball, step_size=0.1, max_steps=1000):
+        if ball.new_velocity is None:
+            return
+
+        projected_x = ball.x
+        projected_y = ball.y
+        velocity_x, velocity_y = ball.new_velocity
+
+        for step in range(max_steps):
+            # Bewege die Phantomkugel entlang der berechneten Bahn
+            projected_x += velocity_x * step_size
+            projected_y += velocity_y * step_size
+
+            # Zeichne die Phantomkugel
+            qp.setBrush(QBrush(QColor(255, 255, 255, 100)))  # Weiß, halbtransparent für Phantomkugel
+            qp.drawEllipse(QPointF(projected_x, projected_y), ball.radius, ball.radius)
+        
+            # Beende die Schleife, falls die Kugel den Rand erreicht
+            if projected_x < 0 or projected_x > self.width() or projected_y < 0 or projected_y > self.height():
+                break
 
     def drawGuidelines(self, qp):
         for ball in self.balls:
