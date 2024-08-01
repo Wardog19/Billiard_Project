@@ -1,4 +1,5 @@
-﻿import math
+﻿#ui.py
+import math
 from PyQt5.QtWidgets import QWidget
 from PyQt5.QtGui import QPainter, QColor, QBrush, QPen, QCursor
 from PyQt5.QtCore import QPointF, Qt, QEvent
@@ -6,6 +7,7 @@ from pynput import mouse, keyboard
 import win32gui
 import win32con
 import win32api
+import logging
 
 class BilliardWidget(QWidget):
     def __init__(self, balls, app_instance, *args, **kwargs):
@@ -35,7 +37,6 @@ class BilliardWidget(QWidget):
             self.mouseMoveEvent(event)
         return super().event(event)
 
-
     def initUI(self):
         self.setWindowTitle('Transparent Billiard Overlay')
         self.setGeometry(100, 100, 1600, 900)
@@ -54,7 +55,6 @@ class BilliardWidget(QWidget):
             print(f"Main ball angle updated based on mouse position: {math.degrees(angle)} degrees.")
             self.update()
 
-
     def on_press(self, key):
         if key == keyboard.Key.alt_l:
             if not self.is_foreground: 
@@ -65,8 +65,7 @@ class BilliardWidget(QWidget):
                     print("L-ALT gedrückt und Fenster in den Vordergrund gebracht.")
             else:
                 print("L-ALT gedrückt, aber Fenster war bereits im Vordergrund.")
-
-        
+      
     def on_release(self, key):
         if key == keyboard.Key.alt_l:
             self.l_alt_pressed = False
@@ -74,8 +73,7 @@ class BilliardWidget(QWidget):
             if self.is_foreground:
                 self.is_foreground = False
                 print("Fokusstatus zurückgesetzt, Fenster kann wieder in den Vordergrund gebracht werden.")
-
-        
+    
     def bring_to_foreground(self):
         hwnd = self.winId().__int__()
         win32gui.SetForegroundWindow(hwnd)
@@ -89,15 +87,16 @@ class BilliardWidget(QWidget):
         qp = QPainter(self)
         qp.setRenderHint(QPainter.Antialiasing)
         try:
-            self.drawBalls(qp)
-            self.drawGuidelines(qp)
-            self.drawCollisionPoints(qp)
-            print("Paint event: Balls, guidelines, and collision points drawn.")
+            self.drawBalls(qp)  # Zeichnet die realen Bälle
+    
+            # Für jeden Ball die Projektionen und ggf. Richtlinien zeichnen
+            for ball in self.balls:
+                self.drawBallProjection(qp, ball, draw_guideline=True, draw_phantom=True)
         except Exception as e:
-            print(f"Error in paintEvent: {e}")
+            logging.error(f"Error in paintEvent: {e}")
 
     def drawBalls(self, qp):
-        for ball in self.balls:
+        for i, ball in enumerate(self.balls):
             # Zeichnen der realen Kugeln
             color = QColor(*ball.color)
             color.setAlphaF(0.8)
@@ -105,63 +104,98 @@ class BilliardWidget(QWidget):
             qp.setPen(Qt.NoPen)
             qp.drawEllipse(QPointF(ball.x, ball.y), ball.radius, ball.radius)
 
-            # Zeichnen der Phantomkugel, wenn new_velocity gesetzt ist
-            if ball.new_velocity is not None:
-                projected_x = ball.x
-                projected_y = ball.y
-                for step in range(100):  # Anzahl der Schritte für die Projektion
-                    projected_x += ball.new_velocity[0] * 0.1
-                    projected_y += ball.new_velocity[1] * 0.1
-                    qp.setBrush(QBrush(QColor(255, 255, 255, 100)))  # Weiße, halbtransparente Phantomkugel
-                    qp.drawEllipse(QPointF(projected_x, projected_y), ball.radius, ball.radius)
+            # Nummerierung in der Mitte der Kugeln
+            qp.setPen(Qt.white)  # Weißer Text für bessere Sichtbarkeit
+            font = qp.font()
+            font.setPointSize(10)  # Setze eine angemessene Schriftgröße
+            qp.setFont(font)
+            text_rect = qp.boundingRect(ball.x - ball.radius, ball.y - ball.radius,
+                                        ball.radius * 2, ball.radius * 2,
+                                        Qt.AlignCenter, str(i + 1))
+            qp.drawText(text_rect, Qt.AlignCenter, str(i + 1))
                     
-    def drawPhantomBall(self, qp, ball, step_size=0.1, max_steps=1000):
-        if ball.new_velocity is None:
-            return
+    def drawBallProjection(self, qp, ball, draw_guideline=True, draw_phantom=True, step_size=0.01, max_steps=1000):
+        if draw_guideline:
+            # Zeichne statische Richtlinien, falls benötigt
+            self.drawGuidelinesAndCollisions(qp, ball, show_primary=True, show_parallel=True, show_secondary=True)
 
-        projected_x = ball.x
-        projected_y = ball.y
-        velocity_x, velocity_y = ball.new_velocity
+        if draw_phantom and ball.new_velocity:
+            # Zeichne Phantomkugel basierend auf der Bewegung
+            projected_x = ball.x
+            projected_y = ball.y
+            velocity_x, velocity_y = ball.new_velocity
 
-        for step in range(max_steps):
-            # Bewege die Phantomkugel entlang der berechneten Bahn
-            projected_x += velocity_x * step_size
-            projected_y += velocity_y * step_size
-
-            # Zeichne die Phantomkugel
-            qp.setBrush(QBrush(QColor(255, 255, 255, 100)))  # Weiß, halbtransparent für Phantomkugel
-            qp.drawEllipse(QPointF(projected_x, projected_y), ball.radius, ball.radius)
+            for step in range(max_steps):
+                projected_x += velocity_x * step_size
+                projected_y += velocity_y * step_size
+                qp.setBrush(QBrush(QColor(255, 255, 255, 100)))  # Weiß, halbtransparent
+                qp.setPen(Qt.NoPen)
+                qp.drawEllipse(QPointF(projected_x, projected_y), ball.radius, ball.radius)
         
-            # Beende die Schleife, falls die Kugel den Rand erreicht
-            if projected_x < 0 or projected_x > self.width() or projected_y < 0 or projected_y > self.height():
-                break
+                # Falls die Projektion den Rand erreicht, beenden
+                if projected_x < 0 or projected_x > self.width() or projected_y < 0 or projected_y > self.height():
+                    break
 
-    def drawGuidelines(self, qp):
-        for ball in self.balls:
-            self.drawBallGuidelines(qp, ball)
-            print(f"Guidelines drawn for ball at ({ball.x}, {ball.y}).")
+                # Falls eine Kollision erkannt wird, zeige den Punkt an
+                for other_ball in self.balls:
+                    if other_ball != ball:
+                        ball.calculate_theoretical_collision(other_ball)
+                        if ball.collision_point:
+                            self.drawCollisionPoint(qp, ball.collision_point)
 
+    def drawGuidelinesAndCollisions(self, qp, ball, show_primary=True, show_parallel=True, show_secondary=True):
+        if show_primary:
+            direction = self.getDirection(ball)
+            self.drawPrimaryGuideline(qp, ball, direction)
 
-    def drawBallGuidelines(self, qp, ball):
+        if show_parallel and ball.collision_point:
+            coll_x, coll_y = ball.collision_point
+            center_x, center_y = ball.collision_other.x, ball.collision_other.y
+            self.drawParallelLines(qp, coll_x, coll_y, ball.collision_other, ball.radius)
+
+        if show_secondary and ball.secondary_collision_point:
+            self.drawSecondaryGuidelines(qp, ball)
+
+    def getDirection(self, ball):
         if ball == self.balls[0]:
             direction = QPointF(self.mouse_pos.x() - ball.x, self.mouse_pos.y() - ball.y)
             length = math.sqrt(direction.x()**2 + direction.y()**2)
-            if length == 0:
-                print("Direction length is zero for the main ball.")
-                return
-            direction.setX(direction.x() / length)
-            direction.setY(direction.y() / length)
-
-            ball.velocity = (direction.x(), direction.y())
+            if length != 0:
+                direction.setX(direction.x() / length)
+                direction.setY(direction.y() / length)
         else:
             if ball.new_velocity:
                 direction = QPointF(ball.new_velocity[0], ball.new_velocity[1])
             else:
                 direction = QPointF(ball.velocity[0], ball.velocity[1])
+        return direction
 
-        print(f"Drawing guidelines for ball at ({ball.x}, {ball.y}) with direction {direction}.")
+    def drawParallelLines(self, qp, coll_x, coll_y, other_ball, radius):
+        center_x, center_y = other_ball.x, other_ball.y
+        direction = QPointF(center_x - coll_x, center_y - coll_y)
+        length = math.sqrt(direction.x()**2 + direction.y()**2)
+        if length == 0:
+            print("Direction length is zero; cannot draw parallel lines.")
+            return
+        direction.setX(direction.x() / length)
+        direction.setY(direction.y() / length)
+
+        normal = QPointF(-direction.y(), direction.x())
+        offset_up = QPointF(coll_x + normal.x() * radius, coll_y + normal.y() * radius)
+        offset_down = QPointF(coll_x - normal.x() * radius, coll_y - normal.y() * radius)
+        end_up = QPointF(center_x + normal.x() * radius, center_y + normal.y() * radius)
+        end_down = QPointF(center_x - normal.x() * radius, center_y - normal.y() * radius)
+
+        qp.setPen(QPen(Qt.green, 1, Qt.SolidLine))
+        qp.drawLine(QPointF(offset_up.x(), offset_up.y()), QPointF(end_up.x(), end_up.y()))
+        qp.drawLine(QPointF(end_up.x(), end_up.y()), QPointF(end_up.x() + direction.x() * 1600, end_up.y() + direction.y() * 1600))
+        qp.drawLine(QPointF(offset_down.x(), offset_down.y()), QPointF(end_down.x(), end_down.y()))
+        qp.drawLine(QPointF(end_down.x(), end_down.y()), QPointF(end_down.x() + direction.x() * 1600, end_down.y() + direction.y() * 1600))
+
+        print(f"Parallel lines drawn from collision point ({coll_x}, {coll_y}) through center ({center_x}, {center_y}).")
+        
+    def drawPrimaryGuideline(self, qp, ball, direction):
         length = 1600
-
         qp.setPen(QPen(Qt.white, 1, Qt.SolidLine))
         qp.drawLine(QPointF(ball.x, ball.y), QPointF(ball.x + direction.x() * length, ball.y + direction.y() * length))
 
@@ -173,107 +207,11 @@ class BilliardWidget(QWidget):
         qp.drawLine(QPointF(ball.x - normal.x() * ball.radius, ball.y - normal.y() * ball.radius),
                     QPointF(ball.x - normal.x() * ball.radius + direction.x() * length,
                             ball.y - normal.y() * ball.radius + direction.y() * length))
-
-        # Zeichnen der Kollisionslinie durch den Kollisionspunkt und Mittelpunkt
-        if ball.collision_point:
-            coll_x, coll_y = ball.collision_point
-            center_x, center_y = ball.collision_other.x, ball.collision_other.y
-            ref_dir_x = center_x - coll_x
-            ref_dir_y = center_y - coll_y
-            ref_length = math.sqrt(ref_dir_x**2 + ref_dir_y**2)
-            if ref_length != 0:
-                ref_dir_x /= ref_length
-                ref_dir_y /= ref_length
-
-                # Zeichne die Linie durch den Kollisionspunkt und den Mittelpunkt der Kugel
-                qp.setPen(QPen(Qt.cyan, 1, Qt.SolidLine))
-                qp.drawLine(QPointF(coll_x, coll_y), QPointF(center_x, center_y))
-                # Verlängere die Linie durch den Mittelpunkt hinaus
-                qp.drawLine(QPointF(center_x, center_y), 
-                            QPointF(center_x + ref_dir_x * 1600, center_y + ref_dir_y * 1600))
-
-                # Zeichnen der parallelen Linien
-                self.drawParallelLines(qp, coll_x, coll_y, center_x, center_y, ball.radius)
-
-                # Kollisionserkennung für die getroffene Kugel
-                if ball.collision_other:
-                    ball.collision_other.calculate_secondary_collision_point(self.balls)
-                    self.drawSecondaryGuidelines(qp, ball.collision_other)
-            else:
-                print("Reference direction length is zero; cannot draw collision line.")
-        else:
-            print("No collision point; no collision lines drawn.")
-
-
-
-    def drawParallelLines(self, qp, coll_x, coll_y, center_x, center_y, radius):
-        # Berechnung der Richtung der Linie
-        direction = QPointF(center_x - coll_x, center_y - coll_y)
-        length = math.sqrt(direction.x()**2 + direction.y()**2)
-        if length == 0:
-            print("Direction length is zero; cannot draw parallel lines.")
-            return
-        direction.setX(direction.x() / length)
-        direction.setY(direction.y() / length)
-
-        # Berechnung der Normalen zur Linie
-        normal = QPointF(-direction.y(), direction.x())
-
-        # Berechnung der Punkte für die parallelen Linien
-        offset_up = QPointF(coll_x + normal.x() * radius, coll_y + normal.y() * radius)
-        offset_down = QPointF(coll_x - normal.x() * radius, coll_y - normal.y() * radius)
-        end_up = QPointF(center_x + normal.x() * radius, center_y + normal.y() * radius)
-        end_down = QPointF(center_x - normal.x() * radius, center_y - normal.y() * radius)
-
-        # Zeichnen der oberen parallelen Linie
-        qp.setPen(QPen(Qt.green, 1, Qt.SolidLine))
-        qp.drawLine(QPointF(offset_up.x(), offset_up.y()), QPointF(end_up.x(), end_up.y()))
-        qp.drawLine(QPointF(end_up.x(), end_up.y()), QPointF(end_up.x() + direction.x() * 1600, end_up.y() + direction.y() * 1600))
-
-        # Zeichnen der unteren parallelen Linie
-        qp.drawLine(QPointF(offset_down.x(), offset_down.y()), QPointF(end_down.x(), end_down.y()))
-        qp.drawLine(QPointF(end_down.x(), end_down.y()), QPointF(end_down.x() + direction.x() * 1600, end_down.y() + direction.y() * 1600))
-
-        print(f"Parallel lines drawn from collision point ({coll_x}, {coll_y}) through center ({center_x}, {center_y}).")
-
-
-    def drawSecondaryGuidelines(self, qp, ball):
-        if ball.secondary_collision_point:
-            coll_x, coll_y = ball.secondary_collision_point
-            center_x, center_y = ball.secondary_collision_other.x, ball.secondary_collision_other.y
-            ref_dir_x = center_x - coll_x
-            ref_dir_y = center_y - coll_y
-            ref_length = math.sqrt(ref_dir_x**2 + ref_dir_y**2)
-            if ref_length != 0:
-                ref_dir_x /= ref_length
-                ref_dir_y /= ref_length
-
-                # Zeichne die sekundäre Kollisionslinie
-                qp.setPen(QPen(Qt.magenta, 1, Qt.SolidLine))
-                qp.drawLine(QPointF(coll_x, coll_y), QPointF(center_x, center_y))
-                qp.drawLine(QPointF(center_x, center_y), 
-                            QPointF(center_x + ref_dir_x * 1600, center_y + ref_dir_y * 1600))
-
-                print(f"Secondary collision line drawn from ({coll_x}, {coll_y}) to ({center_x}, {center_y}).")
-            else:
-                print("Reference direction length is zero; cannot draw secondary collision line.")
-        else:
-            print("No secondary collision point; no secondary guidelines drawn.")
-
-
-    def drawCollisionPoints(self, qp):
-        for ball in self.balls:
-            if ball.collision_point:
-                x, y = ball.collision_point
-                print(f"Drawing collision point at: ({x}, {y})")
-                qp.setPen(QPen(Qt.white, 2))
-                qp.drawPoint(QPointF(x, y))
-            if ball.secondary_collision_point:
-                x, y = ball.secondary_collision_point
-                print(f"Drawing secondary collision point at: ({x}, {y})")
-                qp.setPen(QPen(Qt.red, 2))
-                qp.drawPoint(QPointF(x, y))
-                
+        
+    def drawCollisionPoint(self, qp, point):
+        qp.setPen(QPen(Qt.red, 3))  # Farbe und Dicke des Kollisionspunkts
+        qp.drawPoint(QPointF(point[0], point[1]))
+             
     def keyPressEvent(self, event):
         if event.key() == Qt.Key_Control:
             # Umschalten des eingefrorenen Zustands des Overlays
@@ -304,7 +242,6 @@ class BilliardWidget(QWidget):
                 print(f"Ball moved to mouse position at ({widget_mouse_pos.x()}, {widget_mouse_pos.y()}).")
                 self.update()
 
-
     def update(self):
         if not self.overlay_frozen:
             super().update()
@@ -319,16 +256,6 @@ class BilliardWidget(QWidget):
                     ball.follow_mouse = False
                     print(f"Ball at ({ball.x}, {ball.y}) stopped following mouse.")
 
-
-    def would_collide(self, ball, new_x, new_y, other):
-        dx = new_x - other.x
-        dy = new_y - other.y
-        distance = math.sqrt(dx**2 + dy**2)
-        collision = distance < ball.radius + other.radius
-        print(f"Checking collision: ball at ({ball.x}, {ball.y}), other at ({other.x}, {other.y}), distance={distance}, collision={collision}")
-        return collision
-
-    
     def mousePressEvent(self, event):
         pos = event.pos()
         for ball in self.balls:
@@ -338,8 +265,7 @@ class BilliardWidget(QWidget):
                 ball.follow_mouse = True
                 print(f"Mouse pressed at ({pos.x()}, {pos.y()}), ball at ({ball.x}, {ball.y}) selected.")
                 break
-
-            
+     
     def mouseMoveEvent(self, event):
         if not self.overlay_frozen:
             global_mouse_pos = QCursor.pos()

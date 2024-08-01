@@ -1,4 +1,5 @@
-﻿import math
+﻿#physics.py
+import math
 
 class Ball:
     def __init__(self, x, y, radius, color, control_key=None, new_velocity=None):
@@ -23,37 +24,40 @@ class Ball:
         self.x = x
         self.y = y
 
-    def calculate_collision_point(self, other):
-        dx = other.x - self.x
-        dy = other.y - self.y
-        center_distance = math.sqrt(dx**2 + dy**2)
-
-        # Vermeidung von Kollisionen innerhalb des eigenen Radius
-        if center_distance > self.radius + other.radius:
+    def calculate_theoretical_collision(self, other):
+        if self.new_velocity is None or self.new_velocity == (0, 0):
             return
 
-        if center_distance <= (self.radius + other.radius):
-            if center_distance != 0:
-                normal = (dx / center_distance, dy / center_distance)
-            else:
-                normal = (1, 0)  # Arbiträrer Normalvektor, falls Kugeln sich überschneiden
+        # Line segment start and end points (ray)
+        ray_start = (self.x, self.y)
+        ray_end = (self.x + self.new_velocity[0], self.y + self.new_velocity[1])
 
-            contact_x = self.x + normal[0] * self.radius
-            contact_y = self.y + normal[1] * self.radius
+        # Vector from the start of the ray to the other ball's center
+        to_circle = (other.x - ray_start[0], other.y - ray_start[1])
 
-            self.collision_point = (contact_x, contact_y)
+        # Projection length
+        ray_dir = (ray_end[0] - ray_start[0], ray_end[1] - ray_start[1])
+        ray_length = math.sqrt(ray_dir[0] ** 2 + ray_dir[1] ** 2)
+        if ray_length == 0:
+            return
+        ray_dir_normalized = (ray_dir[0] / ray_length, ray_dir[1] / ray_length)
+
+        projection_length = to_circle[0] * ray_dir_normalized[0] + to_circle[1] * ray_dir_normalized[1]
+
+        # Closest point on the ray to the other ball's center
+        closest_point = (ray_start[0] + ray_dir_normalized[0] * projection_length,
+                         ray_start[1] + ray_dir_normalized[1] * projection_length)
+
+        # Distance from the closest point to the other ball's center
+        closest_distance = math.sqrt((closest_point[0] - other.x) ** 2 +
+                                     (closest_point[1] - other.y) ** 2)
+
+        if closest_distance <= other.radius + self.radius:
+            self.collision_point = closest_point
             self.collision_other = other
-
-            # Berechnung der neuen Geschwindigkeit nach Kollision
-            self.new_velocity = (
-                -self.velocity[0],  # Beispielhafte neue Geschwindigkeit nach Kollision
-                -self.velocity[1]
-            )
         else:
             self.collision_point = None
-            self.new_velocity = None
             self.collision_other = None
-
 
     def simulate_path_and_check_collision(self, other_balls, max_steps=1000, step_size=0.1):
         if self.new_velocity is None:
@@ -67,6 +71,7 @@ class Ball:
             # Bewege die Phantomkugel entlang der berechneten Bahn
             projected_x += velocity_x * step_size
             projected_y += velocity_y * step_size
+            
 
             # Überprüfe Kollisionen mit allen anderen Kugeln
             for other in other_balls:
@@ -74,6 +79,7 @@ class Ball:
                     dx = other.x - projected_x
                     dy = other.y - projected_y
                     center_distance = math.sqrt(dx**2 + dy**2)
+                    
 
                     if center_distance <= (self.radius + other.radius):
                         # Berechnung des Kontaktpunkts
@@ -81,6 +87,7 @@ class Ball:
                         contact_x = other.x - normal[0] * other.radius
                         contact_y = other.y - normal[1] * other.radius
                         return (contact_x, contact_y), other
+                    
 
         return None, None
 
@@ -93,7 +100,7 @@ ball2 = Ball(130, 100, 18, (0, 255, 0))
 ball3 = Ball(160, 100, 18, (0, 0, 255))
 
 ball1.velocity = (10, 0)  # Bewegt sich horizontal auf ball2 zu
-ball1.calculate_collision_point(ball2)
+ball1.calculate_theoretical_collision(ball2)
 if ball1.collision_point:
     print(f"Erste Kollision: {ball1.collision_point} mit Ball 2")
 
